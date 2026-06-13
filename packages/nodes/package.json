@@ -1,0 +1,25 @@
+{
+  "name": "@flowpilot/nodes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/packages/nodes/src/index.js",
+  "types": "dist/packages/nodes/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/packages/nodes/src/index.d.ts",
+      "import": "./dist/packages/nodes/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flowpilot/database": "*",
+    "@flowpilot/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

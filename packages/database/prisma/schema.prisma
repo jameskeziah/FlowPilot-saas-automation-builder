@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum WorkflowVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorkflowRunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowStepRunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum NodeCategory {
+  TRIGGER
+  CONDITION
+  AI
+  ACTION
+  DELAY
+  CRM
+  COMMUNICATION
+  PAYMENT
+  DOCUMENT
+}
+
+enum CredentialVaultStatus {
+  ACTIVE
+  REVOKED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String?  @unique
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships WorkspaceMember[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members             WorkspaceMember[]
+  workflows           Workflow[]
+  integrationAccounts IntegrationAccount[]
+  credentialVaults    CredentialVault[]
+  triggerEvents       TriggerEvent[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  role        WorkspaceRole @default(MEMBER)
+  userId      String
+  workspaceId String
+  createdAt   DateTime      @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Workflow {
+  id              String         @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String?
+  status          WorkflowStatus @default(DRAFT)
+  activeVersionId String?        @unique
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  activeVersion WorkflowVersion?  @relation("ActiveWorkflowVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions      WorkflowVersion[] @relation("WorkflowVersions")
+  runs          WorkflowRun[]
+
+  @@index([workspaceId, status])
+}
+
+model WorkflowVersion {
+  id          String                @id @default(cuid())
+  workflowId  String
+  version     Int
+  status      WorkflowVersionStatus @default(DRAFT)
+  definition  Json
+  notes       String?
+  createdAt   DateTime              @default(now())
+  publishedAt DateTime?
+
+  workflow          Workflow       @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  activeForWorkflow Workflow?      @relation("ActiveWorkflowVersion")
+  nodes             WorkflowNode[]
+  edges             WorkflowEdge[]
+  runs              WorkflowRun[]
+
+  @@unique([workflowId, version])
+  @@index([workflowId, status])
+}
+
+model WorkflowNode {
+  id                String   @id @default(cuid())
+  workflowVersionId String
+  nodeKey           String
+  type              String
+  label             String?
+  positionX         Float
+  positionY         Float
+  config            Json     @default("{}")
+  credentialKey     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workflowVersion WorkflowVersion   @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
+  outgoingEdges   WorkflowEdge[]    @relation("WorkflowEdgeSource")
+  incomingEdges   WorkflowEdge[]    @relation("WorkflowEdgeTarget")
+  stepRuns        WorkflowStepRun[]
+
+  @@unique([workflowVersionId, nodeKey])
+  @@index([workflowVersionId, type])
+}
+
+model WorkflowEdge {
+  id                String  @id @default(cuid())
+  workflowVersionId String
+  edgeKey           String
+  sourceNodeId      String
+  targetNodeId      String
+  sourceHandle      String?
+  targetHandle      String?
+  condition         Json?
+
+  workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
+  sourceNode      WorkflowNode    @relation("WorkflowEdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode      WorkflowNode    @relation("WorkflowEdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowVersionId, edgeKey])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+}
+
+model WorkflowRun {
+  id                String            @id @default(cuid())
+  workflowId        String
+  workflowVersionId String?
+  status            WorkflowRunStatus @default(QUEUED)
+  input             Json?
+  output            Json?
+  error             String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime          @default(now())
+
+  workflow        Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion WorkflowVersion?  @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
+  stepRuns        WorkflowStepRun[]
+  logs            ExecutionLog[]
+
+  @@index([workflowId, createdAt])
+  @@index([workflowVersionId])
+  @@index([status])
+}
+
+model WorkflowStepRun {
+  id             String                @id @default(cuid())
+  workflowRunId  String
+  workflowNodeId String?
+  nodeKey        String
+  nodeType       String
+  status         WorkflowStepRunStatus @default(QUEUED)
+  input          Json?
+  output         Json?
+  error          String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime              @default(now())
+
+  workflowRun  WorkflowRun    @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workflowNode WorkflowNode?  @relation(fields: [workflowNodeId], references: [id], onDelete: SetNull)
+  logs         ExecutionLog[]
+
+  @@index([workflowRunId])
+  @@index([workflowNodeId])
+  @@index([nodeType])
+  @@index([status])
+}
+
+model NodeRegistry {
+  id           String       @id @default(cuid())
+  type         String       @unique
+  label        String
+  category     NodeCategory
+  provider     String?
+  description  String?
+  inputSchema  Json?
+  outputSchema Json?
+  enabled      Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  handlers NodeHandler[]
+}
+
+model NodeHandler {
+  id             String   @id @default(cuid())
+  nodeRegistryId String
+  runtime        String
+  handlerKey     String
+  version        String   @default("1")
+  enabled        Boolean  @default(true)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  nodeRegistry NodeRegistry @relation(fields: [nodeRegistryId], references: [id], onDelete: Cascade)
+
+  @@unique([nodeRegistryId, handlerKey, version])
+  @@index([runtime, enabled])
+}
+
+model ExecutionLog {
+  id                String   @id @default(cuid())
+  workflowRunId     String
+  workflowStepRunId String?
+  level             String
+  message           String
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  workflowRun     WorkflowRun      @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workflowStepRun WorkflowStepRun? @relation(fields: [workflowStepRunId], references: [id], onDelete: Cascade)
+
+  @@index([workflowRunId, createdAt])
+  @@index([workflowStepRunId, createdAt])
+  @@index([level])
+}
+
+model IntegrationAccount {
+  id          String   @id @default(cuid())
+  workspaceId String
+  provider    String
+  accountKey  String
+  label       String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  credentials CredentialVault[]
+
+  @@unique([workspaceId, provider, accountKey])
+  @@index([workspaceId, provider])
+}
+
+model CredentialVault {
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  integrationAccountId String?
+  provider             String
+  credentialKey        String
+  label                String
+  encryptedSecret      String
+  metadata             Json?
+  status               CredentialVaultStatus @default(ACTIVE)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  integrationAccount IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, credentialKey])
+  @@index([workspaceId, provider])
+  @@index([integrationAccountId])
+}
+
+model TriggerEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  source      String
+  externalId  String?
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalId])
+  @@index([workspaceId, source])
+}

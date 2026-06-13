@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@flowpilot/shared": ["packages/shared/src/index.ts"],
+      "@flowpilot/nodes": ["packages/nodes/src/index.ts"],
+      "@flowpilot/database": ["packages/database/src/index.ts"],
+      "@flowpilot/ui": ["packages/ui/src/index.ts"]
+    }
+  }
+}

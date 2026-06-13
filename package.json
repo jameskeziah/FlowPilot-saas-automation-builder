@@ -1,0 +1,34 @@
+{
+  "name": "flowpilot-pro",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api,worker -c auto \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:worker\"",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:worker": "npm run dev -w apps/worker",
+    "build": "npm run build --workspaces --if-present --include-workspace-root=false -w packages/shared -w packages/ui -w packages/database -w packages/nodes -w apps/api -w apps/web -w apps/worker",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run prisma:generate -w packages/database",
+    "db:migrate": "npm run prisma:migrate -w packages/database",
+    "db:studio": "npm run prisma:studio -w packages/database"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prisma": "^7.8.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@xyflow/react": "^12.11.0",
+    "pg": "^8.21.0"
+  }
+}

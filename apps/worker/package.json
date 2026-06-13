@@ -1,0 +1,23 @@
+{
+  "name": "@flowpilot/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/apps/worker/src/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flowpilot/database": "*",
+    "@flowpilot/nodes": "*",
+    "@flowpilot/shared": "*",
+    "bullmq": "^5.76.10",
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.3"
+  }
+}
