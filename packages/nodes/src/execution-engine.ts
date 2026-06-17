@@ -91,8 +91,12 @@ export function orderWorkflowNodes(version: WorkflowVersionWithGraph) {
 
 async function loadRunnableVersion(job: WorkflowRunJob) {
   if (job.workflowVersionId) {
-    return prisma.workflowVersion.findUnique({
-      where: { id: job.workflowVersionId },
+    return prisma.workflowVersion.findFirst({
+      where: {
+        id: job.workflowVersionId,
+        workflowId: job.workflowId,
+        workspaceId: job.workspaceId,
+      },
       include: {
         workflow: true,
         nodes: true,
@@ -106,8 +110,12 @@ async function loadRunnableVersion(job: WorkflowRunJob) {
     });
   }
 
-  const workflow = await prisma.workflow.findUnique({
-    where: { id: job.workflowId },
+  const workflow = await prisma.workflow.findFirst({
+    where: {
+      id: job.workflowId,
+      workspaceId: job.workspaceId,
+      deletedAt: null,
+    },
     include: {
       activeVersion: {
         include: {
@@ -121,8 +129,8 @@ async function loadRunnableVersion(job: WorkflowRunJob) {
           },
         },
       },
-      versions: {
-        orderBy: { version: "desc" },
+        versions: {
+          orderBy: { versionNumber: "desc" },
         take: 1,
         include: {
           workflow: true,
@@ -142,33 +150,60 @@ async function loadRunnableVersion(job: WorkflowRunJob) {
 }
 
 export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWorkflowRunOptions = {}) {
+  if (!job.workspaceId) {
+    throw new Error("Workflow run job is missing workspaceId");
+  }
+
   const version = await loadRunnableVersion(job);
 
   if (!version) {
     throw new Error(`Workflow ${job.workflowId} has no executable version`);
   }
 
-  const workflowRun = job.workflowRunId
-    ? await prisma.workflowRun.update({
-        where: { id: job.workflowRunId },
-        data: {
-          status: "RUNNING",
-          startedAt: new Date(),
-          workflowVersionId: version.id,
-        },
-      })
-    : await prisma.workflowRun.create({
-        data: {
-          workflowId: version.workflowId,
-          workflowVersionId: version.id,
-          status: "RUNNING",
-          input: toNullableInputJson(job.input),
-          startedAt: new Date(),
-        },
-      });
+  if (version.workflow.workspaceId !== job.workspaceId || version.workflow.deletedAt) {
+    throw new Error(`Workflow ${job.workflowId} has no executable version`);
+  }
+
+  let workflowRun;
+
+  if (job.workflowRunId) {
+    const existingRun = await prisma.workflowRun.findFirst({
+      where: {
+        id: job.workflowRunId,
+        workspaceId: job.workspaceId,
+        workflowId: version.workflowId,
+      },
+    });
+
+    if (!existingRun) {
+      throw new Error(`Workflow run ${job.workflowRunId} was not found in this workspace`);
+    }
+
+    workflowRun = await prisma.workflowRun.update({
+      where: { id: existingRun.id },
+      data: {
+        status: "RUNNING",
+        startedAt: new Date(),
+        workflowVersionId: version.id,
+      },
+    });
+  } else {
+    workflowRun = await prisma.workflowRun.create({
+      data: {
+        workspaceId: job.workspaceId,
+        workflowId: version.workflowId,
+        workflowVersionId: version.id,
+        startedById: job.triggeredById,
+        status: "RUNNING",
+        input: toNullableInputJson(job.input),
+        startedAt: new Date(),
+      },
+    });
+  }
 
   await prisma.executionLog.create({
     data: {
+      workspaceId: job.workspaceId,
       workflowRunId: workflowRun.id,
       level: "info",
       message: options.startMessage ?? "Workflow run started",
@@ -189,8 +224,9 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
 
       const stepRun = await prisma.workflowStepRun.create({
         data: {
+          workspaceId: job.workspaceId,
           workflowRunId: workflowRun.id,
-          workflowNodeId: node.id,
+          nodeId: node.id,
           nodeKey: node.nodeKey,
           nodeType: node.type,
           status: "RUNNING",
@@ -201,6 +237,7 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
 
       await prisma.executionLog.create({
         data: {
+          workspaceId: job.workspaceId,
           workflowRunId: workflowRun.id,
           workflowStepRunId: stepRun.id,
           level: "info",
@@ -217,7 +254,7 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
           workflowVersionId: version.id,
           runId: workflowRun.id,
           nodeId: node.nodeKey,
-          workspaceId: version.workflow.workspaceId,
+          workspaceId: job.workspaceId,
           maxDelayMs: options.maxDelayMs,
         },
       });
@@ -237,6 +274,7 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
 
       await prisma.executionLog.create({
         data: {
+          workspaceId: job.workspaceId,
           workflowRunId: workflowRun.id,
           workflowStepRunId: stepRun.id,
           level: status === "FAILED" ? "error" : "info",
@@ -269,6 +307,7 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
 
     await prisma.executionLog.create({
       data: {
+        workspaceId: job.workspaceId,
         workflowRunId: workflowRun.id,
         level: "info",
         message: options.completeMessage ?? "Workflow run completed",
@@ -289,13 +328,14 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
       where: { id: workflowRun.id },
       data: {
         status: "FAILED",
-        error: message,
+        error: toInputJson({ message }),
         finishedAt: new Date(),
       },
     });
 
     await prisma.executionLog.create({
       data: {
+        workspaceId: job.workspaceId,
         workflowRunId: workflowRun.id,
         level: "error",
         message,
@@ -307,9 +347,11 @@ export async function executeWorkflowRun(job: WorkflowRunJob, options: ExecuteWo
   }
 }
 
-export async function getWorkflowRunDetails(workflowRunId: string) {
-  return prisma.workflowRun.findUnique({
-    where: { id: workflowRunId },
+export async function getWorkflowRunDetails(workflowRunId: string, workspaceId?: string) {
+  const where = workspaceId ? { id: workflowRunId, workspaceId } : { id: workflowRunId };
+
+  return prisma.workflowRun.findFirst({
+    where,
     include: {
       stepRuns: {
         orderBy: { createdAt: "asc" },

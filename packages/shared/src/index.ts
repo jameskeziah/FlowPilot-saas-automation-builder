@@ -61,7 +61,8 @@ export type WorkflowRunJob = {
   workflowId: string;
   workflowVersionId?: string;
   workflowRunId?: string;
-  workspaceId?: string;
+  workspaceId: string;
+  triggeredById?: string;
   input: unknown;
 };
 
@@ -70,7 +71,7 @@ export type NodeExecutionContext = {
   workflowVersionId?: string;
   runId: string;
   nodeId: string;
-  workspaceId?: string;
+  workspaceId: string;
   maxDelayMs?: number;
   credentials?: Record<string, unknown>;
 };

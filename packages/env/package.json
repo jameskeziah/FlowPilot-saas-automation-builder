@@ -1,0 +1,41 @@
+{
+  "name": "@flowpilot/env",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/packages/env/src/index.js",
+  "types": "dist/packages/env/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/packages/env/src/index.d.ts",
+      "require": "./dist/packages/env/src/index.js",
+      "default": "./dist/packages/env/src/index.js"
+    },
+    "./api": {
+      "types": "./dist/packages/env/src/api.d.ts",
+      "require": "./dist/packages/env/src/api.js",
+      "default": "./dist/packages/env/src/api.js"
+    },
+    "./worker": {
+      "types": "./dist/packages/env/src/worker.d.ts",
+      "require": "./dist/packages/env/src/worker.js",
+      "default": "./dist/packages/env/src/worker.js"
+    },
+    "./web": {
+      "types": "./dist/packages/env/src/web.d.ts",
+      "require": "./dist/packages/env/src/web.js",
+      "default": "./dist/packages/env/src/web.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

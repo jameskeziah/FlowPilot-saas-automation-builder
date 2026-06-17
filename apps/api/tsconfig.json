@@ -10,7 +10,17 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@flowpilot/env": ["packages/env/src/index.ts"],
+      "@flowpilot/env/api": ["packages/env/src/api.ts"],
+      "@flowpilot/env/worker": ["packages/env/src/worker.ts"],
+      "@flowpilot/env/web": ["packages/env/src/web.ts"],
+      "@flowpilot/shared": ["packages/shared/src/index.ts"],
+      "@flowpilot/nodes": ["packages/nodes/src/index.ts"],
+      "@flowpilot/database": ["packages/database/src/index.ts"],
+      "@flowpilot/ui": ["packages/ui/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

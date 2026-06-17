@@ -1,11 +1,12 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { Queue, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
+import { apiEnv } from "@flowpilot/env/api";
 import { QUEUE_NAMES, type WorkflowRunJob } from "@flowpilot/shared";
 
 @Injectable()
 export class QueueService implements OnModuleDestroy {
-  private readonly connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+  private readonly connection = new IORedis(apiEnv.REDIS_URL, {
     maxRetriesPerRequest: null
   });
 

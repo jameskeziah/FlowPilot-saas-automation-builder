@@ -11,6 +11,7 @@ enum WorkspaceRole {
   OWNER
   ADMIN
   MEMBER
+  VIEWER
 }
 
 enum WorkflowStatus {
@@ -18,6 +19,7 @@ enum WorkflowStatus {
   ACTIVE
   PAUSED
   ARCHIVED
+  DELETED
 }
 
 enum WorkflowVersionStatus {
@@ -59,6 +61,78 @@ enum CredentialVaultStatus {
   REVOKED
 }
 
+enum WorkspaceInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  INVITE_SENT
+  INVITE_ACCEPTED
+  WORKFLOW_RUN
+  WORKFLOW_PUBLISH
+  WORKFLOW_ARCHIVE
+  API_KEY_CREATED
+  API_KEY_REVOKED
+  CREDENTIAL_CREATED
+  CREDENTIAL_REVOKED
+  SUBSCRIPTION_UPDATED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+}
+
+enum UsageMetric {
+  WORKFLOW_RUN
+  STEP_RUN
+  AI_TOKENS
+  WEBHOOK_CALL
+  API_CALL
+  STORAGE_MB
+  INTEGRATION_CALL
+}
+
+enum FolderStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TagStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum WebhookSubscriptionStatus {
+  ACTIVE
+  PAUSED
+  REVOKED
+}
+
+enum IntegrationConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
 model User {
   id        String   @id @default(cuid())
   clerkId   String?  @unique
@@ -67,21 +141,53 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships WorkspaceMember[]
+  memberships          WorkspaceMember[]
+  sentInvites          WorkspaceInvite[] @relation("InvitesSent")
+  acceptedInvites      WorkspaceInvite[] @relation("InvitesAccepted")
+  apiKeysCreated       ApiKey[] @relation("ApiKeysCreated")
+  apiKeysRevoked       ApiKey[] @relation("ApiKeysRevoked")
+  auditLogs            AuditLog[]
+  webhookSubscriptions WebhookSubscription[]
+  integrationConnections IntegrationConnection[]
+  createdWorkspaces    Workspace[] @relation("WorkspaceCreator")
+  createdWorkflows     Workflow[] @relation("WorkflowCreator")
+  folders              Folder[]
+  tags                 Tag[]
 }
 
 model Workspace {
   id        String   @id @default(cuid())
+  createdById String?
   name      String
   slug      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  createdBy          User? @relation("WorkspaceCreator", fields: [createdById], references: [id], onDelete: SetNull)
   members             WorkspaceMember[]
   workflows           Workflow[]
   integrationAccounts IntegrationAccount[]
   credentialVaults    CredentialVault[]
   triggerEvents       TriggerEvent[]
+  invites             WorkspaceInvite[]
+  folders             Folder[]
+  tags                Tag[]
+  workflowTags        WorkflowTag[]
+  apiKeys             ApiKey[]
+  auditLogs           AuditLog[]
+  subscription        Subscription?
+  usageRecords        UsageRecord[]
+  settings            WorkspaceSettings?
+  webhookSubscriptions WebhookSubscription[]
+  integrationConnections IntegrationConnection[]
+  workflowRuns        WorkflowRun[]
+  workflowStepRuns    WorkflowStepRun[]
+  executionLogs       ExecutionLog[]
+  workflowVersions    WorkflowVersion[]
+  workflowNodes       WorkflowNode[]
+  workflowEdges       WorkflowEdge[]
+
+  @@index([createdById])
 }
 
 model WorkspaceMember {
@@ -90,54 +196,78 @@ model WorkspaceMember {
   userId      String
   workspaceId String
   createdAt   DateTime      @default(now())
+  deletedAt   DateTime?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])
+  @@index([userId, deletedAt])
 }
 
 model Workflow {
   id              String         @id @default(cuid())
   workspaceId     String
+  folderId        String?
+  createdById     String?
   name            String
   description     String?
   status          WorkflowStatus @default(DRAFT)
   activeVersionId String?        @unique
+  publishedAt     DateTime?
+  archivedAt      DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder        Folder?           @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy     User?             @relation("WorkflowCreator", fields: [createdById], references: [id], onDelete: SetNull)
   activeVersion WorkflowVersion?  @relation("ActiveWorkflowVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   versions      WorkflowVersion[] @relation("WorkflowVersions")
   runs          WorkflowRun[]
+  tags          WorkflowTag[]
+  usageRecords  UsageRecord[]
 
+  @@index([workspaceId])
   @@index([workspaceId, status])
+  @@index([workspaceId, deletedAt])
+  @@index([workspaceId, folderId])
+  @@index([createdById])
+  @@unique([workspaceId, name])
 }
 
 model WorkflowVersion {
-  id          String                @id @default(cuid())
-  workflowId  String
-  version     Int
-  status      WorkflowVersionStatus @default(DRAFT)
-  definition  Json
-  notes       String?
-  createdAt   DateTime              @default(now())
-  publishedAt DateTime?
+  id            String                @id @default(cuid())
+  workspaceId   String
+  workflowId    String
+  versionNumber Int
+  status        WorkflowVersionStatus @default(DRAFT)
+  createdById   String?
+  definition    Json
+  notes         String?
+  publishedAt   DateTime?
+  archivedAt    DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime              @default(now())
 
+  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflow          Workflow       @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
   activeForWorkflow Workflow?      @relation("ActiveWorkflowVersion")
   nodes             WorkflowNode[]
   edges             WorkflowEdge[]
   runs              WorkflowRun[]
 
-  @@unique([workflowId, version])
-  @@index([workflowId, status])
+  @@unique([workflowId, versionNumber])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workflowId])
 }
 
 model WorkflowNode {
   id                String   @id @default(cuid())
+  workspaceId       String
   workflowVersionId String
   nodeKey           String
   type              String
@@ -146,20 +276,25 @@ model WorkflowNode {
   positionY         Float
   config            Json     @default("{}")
   credentialKey     String?
+  deletedAt         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion   @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   outgoingEdges   WorkflowEdge[]    @relation("WorkflowEdgeSource")
   incomingEdges   WorkflowEdge[]    @relation("WorkflowEdgeTarget")
   stepRuns        WorkflowStepRun[]
 
   @@unique([workflowVersionId, nodeKey])
+  @@index([workspaceId, type])
+  @@index([workspaceId, deletedAt])
   @@index([workflowVersionId, type])
 }
 
 model WorkflowEdge {
   id                String  @id @default(cuid())
+  workspaceId       String
   workflowVersionId String
   edgeKey           String
   sourceNodeId      String
@@ -167,60 +302,75 @@ model WorkflowEdge {
   sourceHandle      String?
   targetHandle      String?
   condition         Json?
+  deletedAt         DateTime?
 
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   sourceNode      WorkflowNode    @relation("WorkflowEdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
   targetNode      WorkflowNode    @relation("WorkflowEdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
 
   @@unique([workflowVersionId, edgeKey])
+  @@index([workspaceId])
+  @@index([workspaceId, deletedAt])
   @@index([sourceNodeId])
   @@index([targetNodeId])
 }
 
 model WorkflowRun {
   id                String            @id @default(cuid())
+  workspaceId       String
   workflowId        String
   workflowVersionId String?
+  startedById       String?
   status            WorkflowRunStatus @default(QUEUED)
   input             Json?
   output            Json?
-  error             String?
+  error             Json?
   startedAt         DateTime?
   finishedAt        DateTime?
+  cancelledAt       DateTime?
   createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflow        Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion?  @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
   stepRuns        WorkflowStepRun[]
   logs            ExecutionLog[]
+  usageRecords    UsageRecord[]
 
-  @@index([workflowId, createdAt])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([workflowId])
   @@index([workflowVersionId])
-  @@index([status])
 }
 
 model WorkflowStepRun {
-  id             String                @id @default(cuid())
-  workflowRunId  String
-  workflowNodeId String?
-  nodeKey        String
-  nodeType       String
-  status         WorkflowStepRunStatus @default(QUEUED)
-  input          Json?
-  output         Json?
-  error          String?
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  createdAt      DateTime              @default(now())
+  id            String                @id @default(cuid())
+  workspaceId   String
+  workflowRunId String
+  nodeId        String?
+  nodeKey       String
+  nodeType      String
+  status        WorkflowStepRunStatus @default(QUEUED)
+  input         Json?
+  output        Json?
+  error         Json?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflowRun  WorkflowRun    @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
-  workflowNode WorkflowNode?  @relation(fields: [workflowNodeId], references: [id], onDelete: SetNull)
+  workflowNode WorkflowNode?  @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   logs         ExecutionLog[]
 
+  @@index([workspaceId])
+  @@index([workspaceId, status])
   @@index([workflowRunId])
-  @@index([workflowNodeId])
-  @@index([nodeType])
-  @@index([status])
+  @@index([nodeId])
 }
 
 model NodeRegistry {
@@ -258,6 +408,7 @@ model NodeHandler {
 
 model ExecutionLog {
   id                String   @id @default(cuid())
+  workspaceId       String
   workflowRunId     String
   workflowStepRunId String?
   level             String
@@ -265,21 +416,301 @@ model ExecutionLog {
   metadata          Json?
   createdAt         DateTime @default(now())
 
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflowRun     WorkflowRun      @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
   workflowStepRun WorkflowStepRun? @relation(fields: [workflowStepRunId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, level, createdAt])
   @@index([workflowRunId, createdAt])
   @@index([workflowStepRunId, createdAt])
   @@index([level])
 }
 
+model Folder {
+  id          String       @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  color       String?
+  status      FolderStatus @default(ACTIVE)
+
+  createdById String?
+  deletedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id])
+
+  workflows Workflow[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, deletedAt])
+  @@unique([workspaceId, name])
+}
+
+model Tag {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String?
+  status      TagStatus @default(ACTIVE)
+
+  createdById String?
+  deletedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id])
+
+  workflows WorkflowTag[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@unique([workspaceId, name])
+}
+
+model WorkflowTag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workflowId  String
+  tagId       String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow  Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([tagId])
+  @@unique([workflowId, tagId])
+}
+
+model WorkspaceInvite {
+  id           String                @id @default(cuid())
+  workspaceId  String
+  email        String
+  role         WorkspaceRole
+  tokenHash    String                @unique
+  status       WorkspaceInviteStatus @default(PENDING)
+  invitedById  String?
+  acceptedById String?
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy  User?     @relation("InvitesSent", fields: [invitedById], references: [id])
+  acceptedBy User?     @relation("InvitesAccepted", fields: [acceptedById], references: [id])
+
+  @@unique([workspaceId, email, status])
+  @@index([workspaceId])
+  @@index([email])
+  @@index([status])
+}
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  workspaceId String
+  name        String
+  keyHash     String       @unique
+  prefix      String
+  status      ApiKeyStatus @default(ACTIVE)
+
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+
+  createdById String?
+  revokedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("ApiKeysCreated", fields: [createdById], references: [id])
+  revokedBy User?     @relation("ApiKeysRevoked", fields: [revokedById], references: [id])
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([prefix])
+}
+
+model AuditLog {
+  id          String @id @default(cuid())
+  workspaceId String
+  actorUserId String?
+
+  action      AuditAction
+  entityType  String
+  entityId    String?
+
+  ipAddress String?
+  userAgent String?
+
+  before   Json?
+  after    Json?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorUser User?     @relation(fields: [actorUserId], references: [id])
+
+  @@index([workspaceId])
+  @@index([workspaceId, action])
+  @@index([workspaceId, entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  workspaceId            String             @unique
+  status                 SubscriptionStatus @default(TRIALING)
+  planCode               String
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  trialEndsAt            DateTime?
+  canceledAt             DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([providerCustomerId])
+  @@index([providerSubscriptionId])
+}
+
+model UsageRecord {
+  id          String      @id @default(cuid())
+  workspaceId String
+  metric      UsageMetric
+  quantity    Int         @default(1)
+
+  workflowId String?
+  runId      String?
+
+  metadata Json?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow  Workflow?    @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  run       WorkflowRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([workspaceId, metric])
+  @@index([workspaceId, occurredAt])
+  @@index([workflowId])
+  @@index([runId])
+}
+
+model WorkspaceSettings {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  defaultTimezone String @default("Asia/Kolkata")
+  retentionDays   Int    @default(90)
+
+  allowApiKeys  Boolean @default(true)
+  allowWebhooks Boolean @default(true)
+  allowInvites  Boolean @default(true)
+
+  planLimits Json?
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model WebhookSubscription {
+  id          String                    @id @default(cuid())
+  workspaceId String
+
+  name        String
+  url         String
+  secretHash  String?
+  events      String[]
+
+  status      WebhookSubscriptionStatus @default(ACTIVE)
+
+  createdById String?
+  deletedAt   DateTime?
+
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  failureCount  Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id])
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+}
+
+model IntegrationConnection {
+  id          String                      @id @default(cuid())
+  workspaceId String
+
+  provider    String
+  accountName String?
+  accountId   String?
+  status      IntegrationConnectionStatus @default(ACTIVE)
+
+  credentialId String?
+
+  scopes   String[]
+  metadata Json?
+
+  connectedById String?
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  credential  CredentialVault? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  connectedBy User?            @relation(fields: [connectedById], references: [id])
+
+  @@index([workspaceId])
+  @@index([workspaceId, provider])
+  @@index([workspaceId, status])
+  @@unique([workspaceId, provider, accountId])
+}
+
 model IntegrationAccount {
   id          String   @id @default(cuid())
   workspaceId String
+  createdById String?
   provider    String
   accountKey  String
   label       String
   metadata    Json?
+  status      IntegrationConnectionStatus @default(ACTIVE)
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -288,6 +719,8 @@ model IntegrationAccount {
 
   @@unique([workspaceId, provider, accountKey])
   @@index([workspaceId, provider])
+  @@index([workspaceId, status])
+  @@index([workspaceId, deletedAt])
 }
 
 model CredentialVault {
@@ -305,6 +738,7 @@ model CredentialVault {
 
   workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   integrationAccount IntegrationAccount? @relation(fields: [integrationAccountId], references: [id], onDelete: SetNull)
+  integrationConnections IntegrationConnection[]
 
   @@unique([workspaceId, credentialKey])
   @@index([workspaceId, provider])

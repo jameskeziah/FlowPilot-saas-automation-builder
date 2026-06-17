@@ -11,13 +11,25 @@
     "dev:web": "npm run dev -w apps/web",
     "dev:api": "npm run dev -w apps/api",
     "dev:worker": "npm run dev -w apps/worker",
-    "build": "npm run build --workspaces --if-present --include-workspace-root=false -w packages/shared -w packages/ui -w packages/database -w packages/nodes -w apps/api -w apps/web -w apps/worker",
+    "build": "npm run build --workspaces --if-present --include-workspace-root=false -w packages/shared -w packages/env -w packages/ui -w packages/database -w packages/nodes -w apps/api -w apps/web -w apps/worker",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run env:check && npm run db:validate && npm run typecheck && npm run build",
+    "ci": "npm run check",
+    "test": "npm run check",
+    "env:check": "npm run build -w packages/env && node scripts/validate-env.cjs",
+    "env:check:api": "npm run build -w packages/env && node scripts/validate-env.cjs api",
+    "env:check:web": "npm run build -w packages/env && node scripts/validate-env.cjs web",
+    "env:check:worker": "npm run build -w packages/env && node scripts/validate-env.cjs worker",
     "db:generate": "npm run prisma:generate -w packages/database",
+    "db:validate": "npm run prisma:validate -w packages/database",
     "db:migrate": "npm run prisma:migrate -w packages/database",
+    "db:deploy": "npm run prisma:deploy -w packages/database",
+    "db:push": "npm run prisma:push -w packages/database",
+    "db:seed": "npm run seed -w packages/database",
     "db:studio": "npm run prisma:studio -w packages/database"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
     "concurrently": "^9.1.2",
     "prisma": "^7.8.0",
     "typescript": "^6.0.3"
@@ -29,6 +41,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@xyflow/react": "^12.11.0",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "zod": "^4.4.3"
   }
 }

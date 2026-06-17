@@ -1,9 +1,10 @@
 import { Worker, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
+import { workerEnv } from "@flowpilot/env/worker";
 import { QUEUE_NAMES, type WorkflowRunJob } from "@flowpilot/shared";
 import { executeWorkflowRun } from "@flowpilot/nodes";
 
-const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+const connection = new IORedis(workerEnv.REDIS_URL, {
   maxRetriesPerRequest: null
 });
 
@@ -12,6 +13,7 @@ const worker = new Worker<WorkflowRunJob, unknown, "workflow.run">(
   async (job) => {
     console.log("Processing workflow run", {
       jobId: job.id,
+      workspaceId: job.data.workspaceId,
       workflowId: job.data.workflowId,
       workflowVersionId: job.data.workflowVersionId,
       workflowRunId: job.data.workflowRunId

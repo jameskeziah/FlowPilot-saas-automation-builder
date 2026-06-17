@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@flowpilot/database": "*",
+    "@flowpilot/env": "*",
     "@flowpilot/nodes": "*",
     "@flowpilot/shared": "*",
     "bullmq": "^5.76.10",
